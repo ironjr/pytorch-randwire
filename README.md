@@ -13,6 +13,7 @@ Pytorch implementation of RandWire network in [Exploring Randomly Wired Neural N
 
 ### TODOs
 - Train on ImageNet and record statistics.
+- Create graph visualization tool for fancy looking ;)
 - Build RandWireTiny module running CIFAR-10 for lighter demo.
 - Build computational cost calculation method that returns #FLOPs.
 - Use compiler optimization technique to further reduce memory usage in the forward paths of random networks.

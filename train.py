@@ -133,8 +133,9 @@ def main(args):
         train(trainloader, model, graphs, criterion, optimizer, epoch,
                 train_logger=train_logger, save_every=args.save_every,
                 start_iter=start_iter)
-        test(valloader, model, graphs, criterion, (epoch + 1) * len(trainloader),
-                optimizer=optimizer, val_logger=val_logger)
+        test(valloader, model, graphs, criterion, epoch,
+                (epoch + 1) * len(trainloader), optimizer=optimizer,
+                val_logger=val_logger)
 
 
 # Train
@@ -208,7 +209,7 @@ def train(trainloader, model, graphs, criterion, optimizer, epoch, start_iter=0,
             break
 
 # Test
-def test(valloader, model, graphs, criterion, iteration, val_logger=None, optimizer=None):
+def test(valloader, model, graphs, criterion, epoch, iteration, val_logger=None, optimizer=None):
     print('\nTest')
 
     batch_time = AverageMeter()
@@ -249,7 +250,7 @@ def test(valloader, model, graphs, criterion, iteration, val_logger=None, optimi
 
     if val_logger is not None:
         val_logger.scalar_summary('loss', losses.avg, iteration)
-    print('average test loss: %.3f' % (test_loss))
+    print('average validation loss: %.3f' % (losses.avg))
 
 
 # Save checkpoints

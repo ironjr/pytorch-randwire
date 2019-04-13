@@ -120,7 +120,8 @@ def main(args):
     criterion = CEWithLabelSmoothingLoss
 
     # Use CUDA and enable multi-GPU learning
-    model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
+    model = torch.nn.DataParallel(model,
+            device_ids=range(torch.cuda.device_count()))
     model.cuda()
     for state in optimizer.state.values():
         for k, v in state.items():
@@ -132,11 +133,13 @@ def main(args):
         train(trainloader, model, graphs, criterion, optimizer, epoch,
                 train_logger=train_logger, save_every=args.save_every,
                 start_iter=start_iter)
-        test(valloader, model, graphs, criterion, epoch, val_logger=val_logger)
+        test(valloader, model, graphs, criterion, (epoch + 1) * len(trainloader),
+                optimizer=optimizer, val_logger=val_logger)
 
 
 # Train
-def train(trainloader, model, graphs, criterion, optimizer, epoch, start_iter=0, train_logger=None, save_every=1000):
+def train(trainloader, model, graphs, criterion, optimizer, epoch, start_iter=0,
+        train_logger=None, save_every=1000):
     print('\nEpoch: %d' % epoch)
 
     batch_time = AverageMeter()
@@ -166,12 +169,6 @@ def train(trainloader, model, graphs, criterion, optimizer, epoch, start_iter=0,
         prec = accuracy(outputs.data, target_vars, topk=(1,))
         top1.update(prec[0], inputs.size(0))
         losses.update(loss.data, inputs.size(0))
-
-        # Gradient clip
-        #  if args.grad_clip and loss > loss_thres:
-        #      tqdm.write('batch (%d/%d) | loss: %.3f | BATCH SKIPPED!'
-        #          % (idx, len(trainloader), loss.data))
-        #      continue
 
         # BACKWARD
         optimizer.zero_grad()
@@ -211,7 +208,7 @@ def train(trainloader, model, graphs, criterion, optimizer, epoch, start_iter=0,
             break
 
 # Test
-def test(valloader, model, graphs, criterion, epoch, val_logger=None):
+def test(valloader, model, graphs, criterion, iteration, val_logger=None, optimizer=None):
     print('\nTest')
 
     batch_time = AverageMeter()
@@ -251,8 +248,7 @@ def test(valloader, model, graphs, criterion, epoch, val_logger=None):
     save('test' + str(epoch), model, graphs, optimizer, losses.avg, epoch + 1)
 
     if val_logger is not None:
-        val_logger.scalar_summary('loss', losses.avg,
-                (epoch + 1) * len(trainloader))
+        val_logger.scalar_summary('loss', losses.avg, iteration)
     print('average test loss: %.3f' % (test_loss))
 
 

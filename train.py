@@ -72,51 +72,67 @@ def main(args):
             shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
     # Model and optimizer
-    graph_type = 'WS'
-    graph_params = {
-        'P': 0.75,
-        'K': 4,
-    }
-    model, graphs = RandWireSmall78(model=graph_type, params=graph_params, seeds=None)
+    start_iter = 0
+    if args.resume:
+        # Load from preexisting models
+        print('==> Resuming from checkpoint..')
+        checkpoint = torch.load('./checkpoint/ckpt.pth')
+        graphs = checkpoint['graphs']
+        model, _ = RandWireSmall78(Gs=graphs) # Model from existing random graphs
+        model.load_state_dict(checkpoint['model'])
 
+        optimizer = optim.SGD(
+                model.parameters(),
+                lr=args.lr,
+                momentum=0.9,
+                weight_decay=5e-5)
+        optimizer.load_state_dict(checkpoint['optim'])
+        for group in optimizer.param_groups:
+            group['lr'] = args.lr
+
+        args.start_epoch = checkpoint['epoch']
+        start_iter = checkpoint['iteration']
+        print("Last loss: %.3f" % (checkpoint['loss']))
+        print("Training start from epoch %d iteration %d" % (args.start_epoch, start_iter))
+    else:
+        # Start from scratch
+        print('==> Generating new model..')
+
+        # TODO put this configuration out from the main method
+        graph_type = 'WS'
+        graph_params = {
+            'P': 0.75,
+            'K': 4,
+        }
+        model, graphs = RandWireSmall78(
+                model=graph_type,
+                params=graph_params,
+                seeds=None)
+
+        optimizer = optim.SGD(
+                model.parameters(),
+                lr=args.lr,
+                momentum=0.9,
+                weight_decay=5e-5)
+        print('Model generated with : ', graph_type, 'method with params', graph_params, 'and seed', None)
+
+    # Criterion has no internal parameters
     criterion = CEWithLabelSmoothingLoss
 
-    optimizer = optim.SGD(
-            model.parameters(),
-            lr=args.lr,
-            momentum=0.9,
-            weight_decay=5e-5)
-
-    checkpoint = None
-    # TODO Load from savepoint
-    #  if args.resume:
-    #      print('==> Resuming from checkpoint..')
-    #      checkpoint = torch.load('./checkpoint/ckpt.pth')
-    #      model.load_state_dict(checkpoint['model'])
-    #      graph = checkpoint['graph']
-    #      optimizer.load_state_dict(checkpoint['optim'])
-    #      for state in optimizer.state.values():
-    #          for k, v in state.items():
-    #              if isinstance(v, torch.Tensor):
-    #                  state[k] = v.cuda()
-    #      for group in optimizer.param_groups:
-    #          group['lr'] = args.lr
-    #      args.start_epoch = checkpoint['epoch']
-    #      iteration = checkpoint['iteration']
-    #      print("Last loss: %.3f" % (checkpoint['loss']))
-    #      print("Training start from epoch %d iteration %d" % (args.start_epoch, iteration))
-    #  else:
-    #      pass
-
-    # Enable multi-GPU learning
+    # Use CUDA and enable multi-GPU learning
     model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
     model.cuda()
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.cuda()
 
     # Main run
     for epoch in range(args.start_epoch, args.start_epoch + args.num_epochs):
         train(trainloader, model, graphs, criterion, optimizer, epoch,
-                train_logger=train_logger, save_every=args.save_every)
-        test(valloader, model, graphs, criterion, epoch, val_logger=vallogger)
+                train_logger=train_logger, save_every=args.save_every,
+                start_iter=start_iter)
+        test(valloader, model, graphs, criterion, epoch, val_logger=val_logger)
 
 
 # Train
@@ -213,13 +229,13 @@ def test(valloader, model, graphs, criterion, epoch, val_logger=None):
             target_vars = Variable(targets.cuda())
 
             outputs = model(input_vars)
-            loss = criterion(target_vars, outputs)
+            loss = criterion(outputs, target_vars, eps=0.1)
 
             # Batch evaluation time
             batch_time.update(time.time() - end)
 
             # Update log
-            prec = accuracy(outputs.data, targets, topk=(1,))
+            prec = accuracy(outputs.data, target_vars, topk=(1,))
             top1.update(prec[0], inputs.size(0))
             losses.update(loss.data, inputs.size(0))
 
@@ -314,10 +330,12 @@ if __name__ == '__main__':
             help='epoch index to start log')
     parser.add_argument('--num-epochs', default=1, type=int,
             help='number of epochs to run')
-    parser.add_argument('--save-every', default=1000, type=int,
+    parser.add_argument('--save-every', default=2000, type=int,
             help='save cycle during train mode')
     parser.add_argument('--resume', '-r', action='store_true',
             help='resume from checkpoint')
+    parser.add_argument('--checkpoint', default='./checkpoint/ckpt.pth', type=str,
+            help='path to the checkpoint to load')
     args = parser.parse_args()
 
     # Run main routine

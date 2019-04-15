@@ -8,7 +8,7 @@ from layer import Node
 
 
 class RandomNetwork(nn.Module):
-    def __init__(self, in_planes, planes, G, downsample=True):
+    def __init__(self, in_planes, planes, G, downsample=True, drop_edge=0):
         '''Random DAG network of nodes
 
         Args:
@@ -17,6 +17,7 @@ class RandomNetwork(nn.Module):
             downsample (bool): overrides downsample setting of the top layer
         '''
         super(RandomNetwork, self).__init__()
+        self.drop_edge = drop_edge
         self.nxgraph = G
         self.in_degree = G.in_degree
         self.pred = G.pred
@@ -76,10 +77,27 @@ class RandomNetwork(nn.Module):
                 out = node(x.unsqueeze(-1)) # (N,Cin,H,W,F=1)
             else:
                 y = []
-                for p in self.pred[nxnode]:
+
+                # Apply random edge drop if drop_edge is nonzero
+                # Randomly remove one edge with some probability
+                # if input degree > 1 (following the paper)
+                drop_idx = -1
+                if self.training and self.drop_edge is not 0:
+                    # Whether to drop an input edge or not
+                    if torch.bernoulli(torch.Tensor((self.drop_edge,))) == 1:
+                        # Get random index out of predecessors
+                        drop_idx = torch.randint(len(self.pred[nxnode]), (1,))
+
+                # Aggregate input values to each node
+                for i, p in enumerate(self.pred[nxnode]):
                     ipred = self.nxorder.index(p)
                     iout = self.live[order].index(ipred)
-                    y.append(outs[iout])
+                    if i == drop_idx:
+                        # Drop simply by not passing the value of predecessor
+                        y.append(torch.zeros_like(outs[iout]))
+                    else:
+                        # Normal data flow
+                        y.append(outs[iout])
                     if order is not len(self.nxorder) - 1 and \
                             ipred not in self.live[order + 1]:
                         to_delete.append(iout)
@@ -87,7 +105,7 @@ class RandomNetwork(nn.Module):
                 y = y.permute(1, 2, 3, 4, 0) # (N,Cin,H,W,F)
                 out = node(y)
 
-            # Make output layer compact
+            # Make output layer compact by deleting values not to be used
             if len(to_delete) is not 0:
                 # Delete element in backwards in order to maintain consistency
                 to_delete.sort(reverse=True)

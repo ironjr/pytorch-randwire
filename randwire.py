@@ -12,7 +12,7 @@ from randomnet import RandomNetwork
 
 
 class RandWireRegular(nn.Module):
-    def __init__(self, Gs, num_classes=1000, planes=109): #, cfg=None
+    def __init__(self, Gs, num_classes=1000, planes=109, drop_edge=0.1, dropout=0.2): #, cfg=None
         '''RandWire network in regular regime from Saining Xie et al. (Apr, 2019)
 
         Args:
@@ -27,14 +27,15 @@ class RandWireRegular(nn.Module):
                 SeparableConv(3, half_planes, stride=2),
                 nn.BatchNorm2d(half_planes))
 
-        self.layer2 = RandomNetwork(half_planes, planes, Gs[0])
-        self.layer3 = RandomNetwork(planes, 2 * planes, Gs[1])
-        self.layer4 = RandomNetwork(2 * planes, 4 * planes, Gs[2])
-        self.layer5 = RandomNetwork(4 * planes, 8 * planes, Gs[3])
+        self.layer2 = RandomNetwork(half_planes, planes, Gs[0], drop_edge=drop_edge)
+        self.layer3 = RandomNetwork(planes, 2 * planes, Gs[1], drop_edge=drop_edge)
+        self.layer4 = RandomNetwork(2 * planes, 4 * planes, Gs[2], drop_edge=drop_edge)
+        self.layer5 = RandomNetwork(4 * planes, 8 * planes, Gs[3], drop_edge=drop_edge)
 
         self.conv6 = nn.Conv2d(8 * planes, 1280, kernel_size=1)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(1280, num_classes)
+        self.dropout = nn.Dropout(dropout)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -54,6 +55,7 @@ class RandWireRegular(nn.Module):
 
         out = self.avgpool(self.conv6(out))
         out = out.view(out.size(0), -1)
+        out = self.dropout(out)
         out = self.fc(out)
         return out
 
@@ -107,6 +109,9 @@ class RandWireSmall(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.fc(out)
         return out
+
+    def drop_edges(self):
+        pass
 
 # TODO Make RandWire Tiny for cifar-10
 

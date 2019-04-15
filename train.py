@@ -16,7 +16,7 @@ import torchvision
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
-from randwire import RandWireSmall78
+from randwire import RandWireSmall78, RandWireRegular109, RandWireRegular154
 from loss import CEWithLabelSmoothingLoss
 from logger import Logger
 
@@ -77,8 +77,16 @@ def main(args):
         # Load from preexisting models
         print('==> Resuming from checkpoint..')
         checkpoint = torch.load('./checkpoint/ckpt.pth')
+        # Model from existing random graphs
         graphs = checkpoint['graphs']
-        model, _ = RandWireSmall78(Gs=graphs) # Model from existing random graphs
+        if args.model == 'small78':
+            model, _ = RandWireSmall78(Gs=graphs)
+        elif args.model == 'regular109':
+            model, _ = RandWireRegular109(Gs=graphs)
+        elif args.model == 'regular154':
+            model, _ = RandWireRegular154(Gs=graphs)
+        else:
+            raise NotImplementedError
         model.load_state_dict(checkpoint['model'])
 
         optimizer = optim.SGD(
@@ -104,10 +112,23 @@ def main(args):
             'P': 0.75,
             'K': 4,
         }
-        model, graphs = RandWireSmall78(
-                model=graph_type,
-                params=graph_params,
-                seeds=None)
+        if args.model == 'small78':
+            model, graphs = RandWireSmall78(
+                    model=graph_type,
+                    params=graph_params,
+                    seeds=None)
+        elif args.model == 'regular109':
+            model, graphs = RandWireRegular109(
+                    model=graph_type,
+                    params=graph_params,
+                    seeds=None)
+        elif args.model == 'regular154':
+            model, graphs = RandWireRegular154(
+                    model=graph_type,
+                    params=graph_params,
+                    seeds=None)
+        else:
+            raise NotImplementedError
 
         optimizer = optim.SGD(
                 model.parameters(),

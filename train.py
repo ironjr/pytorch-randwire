@@ -270,8 +270,14 @@ def test(valloader, model, graphs, criterion, epoch, iteration, val_logger=None,
     save('test' + str(epoch), model, graphs, optimizer, losses.avg, epoch + 1)
 
     if val_logger is not None:
-        val_logger.scalar_summary('loss', losses.avg, iteration)
+        info = {
+            'average loss': losses.avg,
+            'top1 average precision': np.asscalar(top1.avg.cpu().numpy()),
+        }
+        for tag, value in info.items():
+            val_logger.scalar_summary(tag, value, iteration)
     print('average validation loss: %.3f' % (losses.avg))
+    print('average top1 precision : %.3f' % (np.asscalar(top1.avg.cpu().numpy())))
 
 
 # Save checkpoints

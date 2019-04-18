@@ -92,16 +92,56 @@ def get_graphs(model, params, ngraphs, nnodes, seeds=None):
 
 
 def test():
-    model = 'ER'
+    model = 'WS'
     params = {
-            'P': 0.5,
+            'P': 0.75,
             'M': 4,
             'K': 4,
             }
     gen = GraphGenerator(model, params, directed=True)
-    G = gen.generate(nnode=32, seed=2)
-    print('Nodes: ', G.nodes)
-    print('Edges: ', G.edges)
+    G = gen.generate(nnode=32, seed=None)
+
+    # Test reordering strategy for minimum memory allocation
+    import numpy as np
+    num_reorder = 20
+    min_lives = len(G.nodes)
+    Gopt = None
+    for i in range(num_reorder):
+        #  print('Nodes: ', G.nodes)
+        #  print('Edges: ', G.edges)
+
+        # Nodes are sorted in topological order (edge start nodes fisrt)
+        nxorder = [n for n in nx.lexicographical_topological_sort(G)]
+
+        # Count live variable to reduce the memory usage
+        ispans = [] # indices from ordered list stored in topological order
+        succ = G.succ
+        for nxnode in nxorder:
+            nextnodes = [nxorder.index(n) for n in succ[nxnode]]
+            span = max(nextnodes) if len(nextnodes) != 0 else G.number_of_nodes()
+            ispans.append(span)
+
+        live = [None for _ in nxorder] # list of nodeids in topological order stored in topological order
+        for order, nxnode in enumerate(nxorder):
+            live[order] = [inode for inode, ispan in enumerate(ispans) \
+                    if ispan >= order and inode < order]
+            #  print(live[order])
+
+        # Reorder graph
+        new_order = np.random.permutation(len(G.nodes))
+        mapping = {i: new_order[i] for i in range(len(G.nodes))}
+        G = nx.relabel_nodes(G, mapping)
+
+        # maximum #live-vars
+        nlives = max([len(nodes) for nodes in live])
+        print(i, nlives)
+        if nlives < min_lives:
+            min_lives = nlives
+            Gopt = G
+
+    print('minimum live vars: ', min_lives)
+    print(Gopt.nodes)
+    print(Gopt.edges)
 
     # Draw graph 
     import matplotlib.pyplot as plt
@@ -109,7 +149,7 @@ def test():
     nx.draw_networkx_nodes(G, pos, node_size=80, node_color='black')
     nx.draw_networkx_nodes(G, pos, node_size=40, node_color='white')
     nx.draw_networkx_edges(G, pos, node_size=80, arrowstyle='->', arrowsize=10,
-            edge_color='black', width=2)
+            edge_color='black', width=1)
     ax = plt.gca()
     ax.set_axis_off()
     plt.show()

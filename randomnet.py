@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import numpy as np
 import networkx as nx
 
 from layer import Node
@@ -18,7 +19,6 @@ class RandomNetwork(nn.Module):
         '''
         super(RandomNetwork, self).__init__()
         self.drop_edge = drop_edge
-        self.nxgraph = G
         self.in_degree = G.in_degree
         self.pred = G.pred
         
@@ -39,22 +39,39 @@ class RandomNetwork(nn.Module):
 
             self.nodes.append(node)
 
-        # Nodes are sorted in topological order (edge start nodes fisrt)
-        self.nxorder = [n for n in nx.topological_sort(self.nxgraph)]
+        # Since initialization of the graphs takes minor proportion on compu-
+        # tation time, we try multiple random permutation and sort to find
+        # optimal configuration for minimum memory consumption. Empirically,
+        # the number of tries are set to 20 which provides suboptimal result on
+        # network with nodes <= 32.
+        num_reorder = 20
+        min_lives = len(G.nodes)
+        for i in range(num_reorder):
+            # Nodes are sorted in topological order (edge start nodes fisrt)
+            self.nxorder = [n for n in nx.lexicographical_topological_sort(G)]
 
-        # Count live variable to reduce the memory usage
-        ispans = [] # indices from ordered list stored in topological order
-        succ = G.succ
-        for nxnode in self.nxorder:
-            nextnodes = [self.nxorder.index(n) for n in succ[nxnode]]
-            span = max(nextnodes) if len(nextnodes) != 0 else G.number_of_nodes()
-            ispans.append(span)
+            # Count live variable to reduce the memory usage
+            ispans = [] # indices from ordered list stored in topological order
+            succ = G.succ
+            for nxnode in self.nxorder:
+                nextnodes = [self.nxorder.index(n) for n in succ[nxnode]]
+                span = max(nextnodes) if len(nextnodes) != 0 else G.number_of_nodes()
+                ispans.append(span)
 
-        self.live = [None for _ in self.nxorder] # list of nodeids in topological order stored in topological order
-        for order, nxnode in enumerate(self.nxorder):
-            self.live[order] = [inode for inode, ispan in enumerate(ispans) \
-                    if ispan >= order and inode < order]
-        # maximum #live-vars = max([len(nodes) for nodes in self.live])
+            self.live = [None for _ in self.nxorder] # list of nodeids in topological order stored in topological order
+            for order, nxnode in enumerate(self.nxorder):
+                self.live[order] = [inode for inode, ispan in enumerate(ispans) \
+                        if ispan >= order and inode < order]
+
+            # Reorder graph
+            new_order = np.random.permutation(len(G.nodes))
+            mapping = {i: new_order[i] for i in range(len(G.nodes))}
+            G = nx.relabel_nodes(G, mapping)
+
+            # Maximum #live-vars
+            nlives = max([len(nodes) for nodes in live])
+            if nlives < min_lives:
+                min_lives = nlives
 
     def forward(self, x):
         '''

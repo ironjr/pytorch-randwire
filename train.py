@@ -18,6 +18,8 @@ import torchvision.transforms as transforms
 
 from randwire import RandWireSmall78, RandWireRegular109, RandWireRegular154
 from loss import CEWithLabelSmoothingLoss
+from scheduler import CosineAnnealingWithRestartsLR
+from util import *
 from logger import Logger
 
 
@@ -90,13 +92,20 @@ def main(args):
         model.load_state_dict(checkpoint['model'])
 
         optimizer = optim.SGD(
-                model.parameters(),
+                group_weight(model),
                 lr=args.lr,
                 momentum=0.9,
                 weight_decay=5e-5)
         optimizer.load_state_dict(checkpoint['optim'])
         for group in optimizer.param_groups:
             group['lr'] = args.lr
+        # Overwrite default hyperparameters for new run
+        group_decay, group_no_decay = optimizer.param_groups
+        group_decay['lr'] = learning_rate
+        #  group_decay['momentum'] = momentum
+        #  group_decay['weight_decay'] = weight_decay
+        group_no_decay['lr'] = learning_rate
+        #  group_no_decay['momentum'] = momentum
 
         args.start_epoch = checkpoint['epoch']
         start_iter = checkpoint['iteration']
@@ -131,11 +140,20 @@ def main(args):
             raise NotImplementedError
 
         optimizer = optim.SGD(
-                model.parameters(),
+                group_weight(model),
                 lr=args.lr,
                 momentum=0.9,
                 weight_decay=5e-5)
+
         print('Model generated with : ', graph_type, 'method with params', graph_params, 'and seed', None)
+
+    # Use cosine annealing scheduler unless noted
+    scheduler = None
+    if not args.no_cosine_annealing:
+        scheduler = CosineAnnealingWithRestartsLR(
+                optimizer,
+                T_max=args.t_max,
+                T_mult=args.t_mult)
 
     # Criterion has no internal parameters
     criterion = CEWithLabelSmoothingLoss
@@ -151,6 +169,10 @@ def main(args):
 
     # Main run
     for epoch in range(args.start_epoch, args.start_epoch + args.num_epochs):
+        if scheduler is not None:
+            scheduler.step()
+            if scheduler.save_flag:
+                save('restart' + str(epoch - 1), model, graphs, optimizer, epoch)
         train(trainloader, model, graphs, criterion, optimizer, epoch,
                 train_logger=train_logger, save_every=args.save_every,
                 start_iter=start_iter)
@@ -297,42 +319,6 @@ def save(label, model, graphs, optimizer, loss=float('inf'), epoch=0, iteration=
     tqdm.write('==> Save done!')
 
 
-class AverageMeter(object):
-    '''Computes and stores the average and current value
-    '''
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
-def accuracy(output, target, topk=(1,)):
-    '''Computes the precision@k for the specified values of k
-    '''
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
-
-
 if __name__ == '__main__':
     assert torch.cuda.is_available(), 'CUDA is required!'
 
@@ -346,6 +332,12 @@ if __name__ == '__main__':
             help='number of workers in dataloader')
     parser.add_argument('--data-root', default='../common/datasets/ImageNet', type=str,
             help='ImageNet12 folder where train/ and val/ belong')
+    parser.add_argument('--no-cosine-annealing', action='store_true',
+            help='use uniform scheduling instead of cosine annealing')
+    parser.add_argument('--t-max', default=10, type=int,
+            help='restart period of cosine annealing')
+    parser.add_argument('--t-mult', default=1.0, type=float,
+            help='factor of increment of restart period each restart')
     parser.add_argument('--lr', default=1e-2, type=float,
             help='learning rate')
     parser.add_argument('--batch-size', default=128, type=int,

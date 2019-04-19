@@ -94,18 +94,18 @@ def main(args):
         optimizer = optim.SGD(
                 group_weight(model),
                 lr=args.lr,
-                momentum=0.9,
-                weight_decay=5e-5)
+                momentum=args.momentum,
+                weight_decay=args.weight_decay)
         optimizer.load_state_dict(checkpoint['optim'])
         for group in optimizer.param_groups:
             group['lr'] = args.lr
         # Overwrite default hyperparameters for new run
         group_decay, group_no_decay = optimizer.param_groups
-        group_decay['lr'] = learning_rate
-        #  group_decay['momentum'] = momentum
-        #  group_decay['weight_decay'] = weight_decay
-        group_no_decay['lr'] = learning_rate
-        #  group_no_decay['momentum'] = momentum
+        group_decay['lr'] = args.lr
+        group_decay['momentum'] = args.momentum
+        group_decay['weight_decay'] = args.weight_decay
+        group_no_decay['lr'] = args.lr
+        group_no_decay['momentum'] = args.momentum
 
         args.start_epoch = checkpoint['epoch']
         start_iter = checkpoint['iteration']
@@ -234,7 +234,7 @@ def train(trainloader, model, graphs, criterion, optimizer, epoch, start_iter=0,
             for tag, value in info.items():
                 train_logger.scalar_summary(tag, value, step + 1)
 
-        tqdm.write('batch (%d/%d) | loss: %.3f | avg_loss: %.3f | Prec@1: %.3f %% (%.3f %%)' 
+        tqdm.write('batch (%d/%d) | loss: %.3f | avg_loss: %.3f | Prec@1: %.3f %% (%.3f %%)'
                 % (batch_idx, len(trainloader), losses.val, losses.avg,
                     np.asscalar(top1.val.cpu().numpy()),
                     np.asscalar(top1.avg.cpu().numpy())))
@@ -340,6 +340,10 @@ if __name__ == '__main__':
             help='factor of increment of restart period each restart')
     parser.add_argument('--lr', default=1e-2, type=float,
             help='learning rate')
+    parser.add_argument('--momentum', default=0.9, type=float,
+            help='SGD momentum')
+    parser.add_argument('--weight-decay', default=5e-5, type=float,
+            help='weight decay for SGD (small: 5e-5, large: 1e-5)')
     parser.add_argument('--batch-size', default=128, type=int,
             help='size of a minibatch')
     parser.add_argument('--start-epoch', default=0, type=int,

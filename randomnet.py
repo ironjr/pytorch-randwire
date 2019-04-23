@@ -9,60 +9,52 @@ from layer import Node
 
 
 class RandomNetwork(nn.Module):
-    def __init__(self, in_planes, planes, G, downsample=True, drop_edge=0):
+    def __init__(self, in_planes, planes, G, Gopt=False, downsample=True, drop_edge=0):
         '''Random DAG network of nodes
 
         Args:
             planes (int): number of channels each nodes have
-            G (`networkx.classes.digraph.DiGraph`) : DAG from random graph generator
+            G (DiGraph): DAG from random graph generator
+            Gopt (bool): whether if given G is optimal
             downsample (bool): overrides downsample setting of the top layer
         '''
         super(RandomNetwork, self).__init__()
         self.drop_edge = drop_edge
 
-        # Since initialization of the graphs takes minor proportion on compu-
-        # tation time, we try multiple random permutation and sort to find
-        # optimal configuration for minimum memory consumption. Empirically,
-        # the number of tries are set to 20 which provides suboptimal result on
-        # network with nodes <= 32.
-        num_reorder = 20
-        Gopt = None
-        min_lives = len(G.nodes)
-        for i in range(num_reorder):
-            # Nodes are sorted in topological order (edge start nodes fisrt)
-            nxorder = [n for n in nx.lexicographical_topological_sort(G)]
+        if Gopt:
+            self.Gopt = G
+            self.nxorder, self.live = self._get_livevars(G)
 
-            # Count live variable to reduce the memory usage
-            ispans = [] # indices from ordered list stored in topological order
-            succ = G.succ
-            for nxnode in nxorder:
-                nextnodes = [nxorder.index(n) for n in succ[nxnode]]
-                span = max(nextnodes) if len(nextnodes) != 0 else G.number_of_nodes()
-                ispans.append(span)
+        else:
+            # Since initialization of the graphs takes minor proportion on compu-
+            # tation time, we try multiple random permutation and sort to find
+            # optimal configuration for minimum memory consumption. Empirically,
+            # the number of tries are set to 20 which provides suboptimal result on
+            # network with nodes <= 32.
+            num_reorder = 20
+            self.Gopt = None
+            min_lives = len(G.nodes)
+            for i in range(num_reorder):
+                nxorder, live = self._get_livevars(G)
 
-            live = [None for _ in nxorder] # list of nodeids in topological order stored in topological order
-            for order, nxnode in enumerate(nxorder):
-                live[order] = [inode for inode, ispan in enumerate(ispans) \
-                        if ispan >= order and inode < order]
+                # Maximum #live-vars
+                nlives = max([len(nodes) for nodes in live])
+                if nlives < min_lives:
+                    min_lives = nlives
+                    self.Gopt = G
+                    self.nxorder = nxorder
+                    self.live = live
 
-            # Maximum #live-vars
-            nlives = max([len(nodes) for nodes in live])
-            if nlives < min_lives:
-                min_lives = nlives
-                Gopt = G
-                self.nxorder = nxorder
-                self.live = live
-
-            # Reorder graph
-            if i is not num_reorder - 1:
-                new_order = np.random.permutation(len(G.nodes))
-                mapping = {i: new_order[i] for i in range(len(G.nodes))}
-                G = nx.relabel_nodes(G, mapping)
+                # Reorder graph
+                if i is not num_reorder - 1:
+                    new_order = np.random.permutation(len(G.nodes))
+                    mapping = {i: new_order[i] for i in range(len(G.nodes))}
+                    G = nx.relabel_nodes(G, mapping)
 
         # Generate nodes based on the final graph
-        self.pred = Gopt.pred
-        self.in_degree = Gopt.in_degree
-        out_degree = Gopt.out_degree
+        self.pred = self.Gopt.pred
+        self.in_degree = self.Gopt.in_degree
+        out_degree = self.Gopt.out_degree
         self.bottom_layer = []
         self.nodes = nn.ModuleList()
         for nxnode in self.nxorder:
@@ -141,6 +133,34 @@ class RandomNetwork(nn.Module):
         out = torch.stack(outs) # (F,N,Cin,H,W)
         out = torch.mean(out, 0) # (N,Cin,H,W)
         return out
+
+    def _get_livevars(self, G):
+        '''Get node traversal order for optimal memory usage
+
+        Args:
+            G (DiGraph): graph of topology of the random network
+
+        Returns:
+            nxorder (list): node traversal order
+            live (list): list of list containing live intermediate outcome at each iteration
+        '''
+        # Nodes are sorted in topological order (edge start nodes fisrt)
+        nxorder = [n for n in nx.lexicographical_topological_sort(G)]
+
+        # Count live variable to reduce the memory usage
+        ispans = [] # indices from ordered list stored in topological order
+        succ = G.succ
+        for nxnode in nxorder:
+            nextnodes = [nxorder.index(n) for n in succ[nxnode]]
+            span = max(nextnodes) if len(nextnodes) != 0 else G.number_of_nodes()
+            ispans.append(span)
+
+        live = [None for _ in nxorder] # list of nodeids in topological order stored in topological order
+        for order, nxnode in enumerate(nxorder):
+            live[order] = [inode for inode, ispan in enumerate(ispans) \
+                    if ispan >= order and inode < order]
+
+        return nxorder, live
 
 
 def test():

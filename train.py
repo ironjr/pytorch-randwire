@@ -81,12 +81,12 @@ def main(args):
         checkpoint = torch.load('./checkpoint/ckpt.pth')
         # Model from existing random graphs
         graphs = checkpoint['graphs']
-        if args.model == 'small78':
-            model, _ = RandWireSmall78(Gs=graphs)
-        elif args.model == 'regular109':
-            model, _ = RandWireRegular109(Gs=graphs)
-        elif args.model == 'regular154':
-            model, _ = RandWireRegular154(Gs=graphs)
+        if args.model in ['small78', 'small']:
+            model, _ = RandWireSmall78(Gs=graphs, Gopt=True)
+        elif args.model in ['regular109', 'medium']:
+            model, _ = RandWireRegular109(Gs=graphs, Gopt=True)
+        elif args.model in ['regular154', 'large']:
+            model, _ = RandWireRegular154(Gs=graphs, Gopt=True)
         else:
             raise NotImplementedError
         model.load_state_dict(checkpoint['model'])
@@ -121,17 +121,17 @@ def main(args):
             'P': 0.75,
             'K': 4,
         }
-        if args.model == 'small78':
+        if args.model in ['small78', 'small']:
             model, graphs = RandWireSmall78(
                     model=graph_type,
                     params=graph_params,
                     seeds=None)
-        elif args.model == 'regular109':
+        elif args.model in ['regular109', 'medium']:
             model, graphs = RandWireRegular109(
                     model=graph_type,
                     params=graph_params,
                     seeds=None)
-        elif args.model == 'regular154':
+        elif args.model in ['regular154', 'large']:
             model, graphs = RandWireRegular154(
                     model=graph_type,
                     params=graph_params,
@@ -326,7 +326,7 @@ if __name__ == '__main__':
     parser.add_argument('--label', default='default', type=str,
             help='labels checkpoints and logs saved under')
     parser.add_argument('--model', default='regular109', type=str,
-            choices=('small78', 'regular109', 'regular154'),
+            choices=('small78', 'small', 'regular109', 'medium', 'regular154', 'large'),
             help='backbone network to use in fpn')
     parser.add_argument('--num-workers', default=2, type=int,
             help='number of workers in dataloader')

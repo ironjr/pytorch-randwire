@@ -12,7 +12,7 @@ from randomnet import RandomNetwork
 
 
 class RandWireRegular(nn.Module):
-    def __init__(self, Gs, num_classes=1000, planes=109, drop_edge=0.1, dropout=0.2): #, cfg=None
+    def __init__(self, Gs, Gopt=False, num_classes=1000, planes=109, drop_edge=0.1, dropout=0.2): #, cfg=None
         '''RandWire network in regular regime from Saining Xie et al. (Apr, 2019)
 
         Args:
@@ -27,10 +27,10 @@ class RandWireRegular(nn.Module):
                 SeparableConv(3, half_planes, stride=2),
                 nn.BatchNorm2d(half_planes))
 
-        self.layer2 = RandomNetwork(half_planes, planes, Gs[0], drop_edge=drop_edge)
-        self.layer3 = RandomNetwork(planes, 2 * planes, Gs[1], drop_edge=drop_edge)
-        self.layer4 = RandomNetwork(2 * planes, 4 * planes, Gs[2], drop_edge=drop_edge)
-        self.layer5 = RandomNetwork(4 * planes, 8 * planes, Gs[3], drop_edge=drop_edge)
+        self.layer2 = RandomNetwork(half_planes, planes, Gs[0], drop_edge=drop_edge, Gopt=Gopt)
+        self.layer3 = RandomNetwork(planes, 2 * planes, Gs[1], drop_edge=drop_edge, Gopt=Gopt)
+        self.layer4 = RandomNetwork(2 * planes, 4 * planes, Gs[2], drop_edge=drop_edge, Gopt=Gopt)
+        self.layer5 = RandomNetwork(4 * planes, 8 * planes, Gs[3], drop_edge=drop_edge, Gopt=Gopt)
 
         self.conv6 = nn.Conv2d(8 * planes, 1280, kernel_size=1)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -58,10 +58,13 @@ class RandWireRegular(nn.Module):
         out = self.dropout(out)
         out = self.fc(out)
         return out
+    
+    def get_graphs(self):
+        return [layer.Gopt for layer in [self.layer2, self.layer3, self.layer4, self.layer5]]
 
 
 class RandWireSmall(nn.Module):
-    def __init__(self, Gs, num_classes=1000, planes=109): #, cfg=None
+    def __init__(self, Gs, Gopt=False, num_classes=1000, planes=109): #, cfg=None
         '''RandWire network in small regime from Saining Xie et al. (Apr, 2019)
 
         Args:
@@ -81,9 +84,9 @@ class RandWireSmall(nn.Module):
                 SeparableConv(half_planes, planes, stride=2),
                 nn.BatchNorm2d(planes))
 
-        self.layer3 = RandomNetwork(planes, planes, Gs[0])
-        self.layer4 = RandomNetwork(planes, 2 * planes, Gs[1])
-        self.layer5 = RandomNetwork(2 * planes, 4 * planes, Gs[2])
+        self.layer3 = RandomNetwork(planes, planes, Gs[0], Gopt=Gopt)
+        self.layer4 = RandomNetwork(planes, 2 * planes, Gs[1], Gopt=Gopt)
+        self.layer5 = RandomNetwork(2 * planes, 4 * planes, Gs[2], Gopt=Gopt)
 
         self.conv6 = nn.Conv2d(4 * planes, 1280, kernel_size=1)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -109,26 +112,28 @@ class RandWireSmall(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.fc(out)
         return out
+    
+    def get_graphs(self):
+        return [layer.Gopt for layer in [self.layer3, self.layer4, self.layer5]]
 
-    def drop_edges(self):
-        pass
 
 # TODO Make RandWire Tiny for cifar-10
 
 
 
 # Wrappers for both network and graph configuration
-def RandWireSmall78(Gs=None, model=None, params=None, nnodes=32, num_classes=1000, seeds=None):
+def RandWireSmall78(Gs=None, Gopt=False, model=None, params=None, nnodes=32, num_classes=1000, seeds=None):
     assert (Gs is not None or (model is not None and params is not None)), 'Graph or its generating method should be given'
     if Gs is None:
         # Generate random graph
         Gs = get_graphs(model, params, 3, nnodes, seeds)
 
     # Generate network from graph configurations
-    net = RandWireSmall(Gs=Gs, num_classes=num_classes, planes=78)
+    net = RandWireSmall(Gs=Gs, Gopt=Gopt, num_classes=num_classes, planes=78)
+    Gs = net.get_graphs()
     return net, Gs
 
-def RandWireRegular109(Gs=None, model=None, params=None, nnodes=32, num_classes=1000, seeds=None):
+def RandWireRegular109(Gs=None, Gopt=False, model=None, params=None, nnodes=32, num_classes=1000, seeds=None):
     assert (Gs is not None or (model is not None and params is not None)), 'Graph or its generating method should be given'
     if Gs is None:
         # Generate random graph
@@ -136,10 +141,11 @@ def RandWireRegular109(Gs=None, model=None, params=None, nnodes=32, num_classes=
         Gs = get_graphs(model, params, 4, nnodes, seeds)
     
     # Generate network from graph configurations
-    net = RandWireRegular(Gs=Gs, num_classes=num_classes, planes=109)
+    net = RandWireRegular(Gs=Gs, Gopt=Gopt, num_classes=num_classes, planes=109)
+    Gs = net.get_graphs()
     return net, Gs
 
-def RandWireRegular154(Gs=None, model=None, params=None, nnodes=32, num_classes=1000, seeds=None):
+def RandWireRegular154(Gs=None, Gopt=False, model=None, params=None, nnodes=32, num_classes=1000, seeds=None):
     assert (Gs is not None or (model is not None and params is not None)), 'Graph or its generating method should be given'
     if Gs is None:
         # Generate random graph
@@ -147,7 +153,8 @@ def RandWireRegular154(Gs=None, model=None, params=None, nnodes=32, num_classes=
         Gs = get_graphs(model, params, 4, nnodes, seeds)
     
     # Generate network from graph configurations
-    net = RandWireRegular(Gs=Gs, num_classes=num_classes, planes=154)
+    net = RandWireRegular(Gs=Gs, Gopt=Gopt, num_classes=num_classes, planes=154)
+    Gs = net.get_graphs()
     return net, Gs
 
 

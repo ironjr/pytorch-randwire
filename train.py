@@ -177,12 +177,14 @@ def main(args):
             if scheduler.save_flag:
                 save('restart' + str(epoch - 1), model, graphs, optimizer, epoch)
                 print('restart' + str(epoch - 1))
+        print(optimizer.param_groups[0]['lr'])
         #  train(trainloader, model, graphs, criterion, optimizer, epoch,
         #          train_logger=train_logger, save_every=args.save_every,
         #          start_iter=start_iter)
         #  test(valloader, model, graphs, criterion, epoch,
         #          (epoch + 1) * len(trainloader), optimizer=optimizer,
         #          val_logger=val_logger)
+    print('Done!')
 
 
 # Train

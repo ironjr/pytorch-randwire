@@ -179,6 +179,10 @@ def main(args):
         test(valloader, model, graphs, criterion, epoch,
                 (epoch + 1) * len(trainloader), optimizer=optimizer,
                 val_logger=val_logger)
+    if scheduler is not None:
+        save('restart' + args.start_epoch + args.num_epochs,
+                model, graphs, optimizer, args.start_epoch + args.num_epochs + 1)
+    print('Done!')
 
 
 # Train

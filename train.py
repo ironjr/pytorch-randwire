@@ -168,17 +168,21 @@ def main(args):
                 state[k] = v.cuda()
 
     # Main run
+    print(args.start_epoch, args.start_epoch + args.num_epochs)
     for epoch in range(args.start_epoch, args.start_epoch + args.num_epochs):
+        print('epoch ', epoch, ' !')
         if scheduler is not None:
             scheduler.step()
+            print('step!')
             if scheduler.save_flag:
                 save('restart' + str(epoch - 1), model, graphs, optimizer, epoch)
-        train(trainloader, model, graphs, criterion, optimizer, epoch,
-                train_logger=train_logger, save_every=args.save_every,
-                start_iter=start_iter)
-        test(valloader, model, graphs, criterion, epoch,
-                (epoch + 1) * len(trainloader), optimizer=optimizer,
-                val_logger=val_logger)
+                print('restart' + str(epoch - 1))
+        #  train(trainloader, model, graphs, criterion, optimizer, epoch,
+        #          train_logger=train_logger, save_every=args.save_every,
+        #          start_iter=start_iter)
+        #  test(valloader, model, graphs, criterion, epoch,
+        #          (epoch + 1) * len(trainloader), optimizer=optimizer,
+        #          val_logger=val_logger)
 
 
 # Train
